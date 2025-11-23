@@ -1,0 +1,7 @@
+{
+    // 告诉 C/C++ 扩展使用 CMake Tools 提供的配置信息
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+
+    // 允许 CMake Tools 覆盖 IntelliSense 设置
+    "C_Cpp.errorSquiggles": "enabled" 
+}

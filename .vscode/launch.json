@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [       
+        {
+            "name": "C++ Debug(via CMake Tools)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program":"${workspaceFolder}/build/Debug/OpenSubdivTest.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "console": "internalConsole"
+        }
+    ]
+}
