@@ -1,0 +1,3 @@
+[submodule "extern/opensubdiv"]
+	path = extern/opensubdiv
+	url = https://github.com/PixarAnimationStudios/OpenSubdiv.git
