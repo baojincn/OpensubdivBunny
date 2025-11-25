@@ -49,14 +49,12 @@ std::vector<unsigned int> g_renderIndices;
 GLuint g_vao, g_vbo, g_ebo;
 int g_currentLevel = 0; // Subdivision level (0~5)
 
-// 显示状态
-bool g_showWireframe = false; // [新增] 是否显示线框
+bool g_showWireframe = false;
 
-// 模型切换相关
+
 int g_modelIndex = 0;   // 0: Bunny, 1: Suzanne, 2: Cube
 const int MAX_MODELS = 3;
 
-// 鼠标交互变量
 bool g_leftMouseDown = false;
 bool g_rightMouseDown = false;
 double g_lastX = 0.0f;
@@ -65,20 +63,13 @@ float g_rotX = 0.0f;
 float g_rotY = 0.0f;
 float g_cameraDist = 3.0f;
 
-// -----------------------------------------------------------------------------
-// 函数声明
-// -----------------------------------------------------------------------------
 void updateMeshSubdivsion(int level);
 void updateBuffers();
 bool loadOBJ(const std::string& path, BaseMesh& baseMesh);
 void createCube(BaseMesh& mesh);
 void loadModelData(int index);
 
-// -----------------------------------------------------------------------------
-// 模型加载与生成逻辑
-// -----------------------------------------------------------------------------
-
-// 生成一个标准的测试立方体
+// Testing cube
 void createCube(BaseMesh& mesh) {
     mesh.vertices.clear(); mesh.normals.clear(); mesh.uvs.clear(); 
     mesh.indices.clear(); mesh.vertsPerFace.clear();
@@ -112,7 +103,6 @@ void createCube(BaseMesh& mesh) {
     for (auto& n : mesh.normals) if(glm::length(n)>0) n = glm::normalize(n);
 }
 
-// loadOBJ
 bool loadOBJ(const std::string& path, BaseMesh& baseMesh) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, 
