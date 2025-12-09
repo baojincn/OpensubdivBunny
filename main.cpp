@@ -52,8 +52,8 @@ int g_currentLevel = 0; // Subdivision level (0~5)
 bool g_showWireframe = false;
 
 
-int g_modelIndex = 0;   // 0: Bunny, 1: Suzanne, 2: Cube
-const int MAX_MODELS = 3;
+int g_modelIndex = 0;   // 0: Bunny, 1: Suzanne, 2:original_bunny, 3: Cube
+const int MAX_MODELS = 4;
 
 bool g_leftMouseDown = false;
 bool g_rightMouseDown = false;
@@ -193,7 +193,10 @@ void loadModelData(int index) {
     } 
     else if (index == 1) {
         loadOBJ("../suzanne.obj", g_baseMesh);
-    } 
+    }
+    else if (index == 2) {
+        loadOBJ("../original_bunny.obj", g_baseMesh);
+    }
     else {
         createCube(g_baseMesh);
         std::cout << "Model Loaded: Cube" << std::endl;
