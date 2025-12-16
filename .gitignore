@@ -1,36 +1,39 @@
-### VS Code/CMake/Build 忽略规则 ###
 
-# 1. 忽略 CMake 构建目录
-# 您的项目截图显示 build 目录在根目录下
-# 建议在项目开始配置前手动删除 build 目录
+.vs/
+
+*CopilotSnapshots*
+*CopilotIndices*
+
+*.Browse.VC.db
+*.db
+
+
 /build/
+/out/
+/bin/
 
-# 2. 忽略 CMake 生成的各种缓存和文件
-# 无论 build 目录叫什么名字，这些都是通用的 CMake 缓存
-# 顶级缓存文件
+
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 install_manifest.txt
 compile_commands.json
+CTestTestfile.cmake
+Makefile
 
-# 3. 忽略 VS Code 相关的本地配置
-# CMake Tools 会在 .vscode 中保存一些缓存
-/.vscode/cmake-kits.json
-/.vscode/cmake-tools-debug-*
-# CMakeUserPresets.json 用于本地私有配置，不应共享
+
+/.vscode/*
+
+!/.vscode/settings.json
+!/.vscode/tasks.json
+!/.vscode/launch.json
+!/.vscode/extensions.json
+
 CMakeUserPresets.json
 
-# 4. 忽略 vcpkg 生成的文件
-# vcpkg 集成文件，通常不会在源码目录中生成，但以防万一
-# Vcpkg 推荐的集成文件
-vcpkg.json
-vcpkg-configuration.json
+vcpkg_installed/
 
-### 平台/工具特定文件 ###
-
-# 5. Visual Studio/Windows 常见临时文件
-#*.obj
+*.obj
 *.o
 *.lib
 *.dll
@@ -39,13 +42,9 @@ vcpkg-configuration.json
 *.ilk
 *.pdb
 *.ipch
+*.tlog
 
-# 6. macOS/Linux 常见文件
+
 .DS_Store
 *.swp
 *~
-
-# 7. 用户自定义私有文件 (可选)
-# 如果您在项目根目录有任何临时的测试文件，可以忽略
-# 例如：
-# temp.txt
