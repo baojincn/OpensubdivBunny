@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 4.1.1)  # vcpkg 推荐 3.20+
 project(OpenSubdivTest LANGUAGES CXX C)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # --- Find vcpkg 提供的依赖 ---
@@ -31,9 +31,9 @@ set(OPENSUBDIV_OPEN_GL_SUPPORT ON)
 add_subdirectory(extern/opensubdiv)
 include_directories(extern/opensubdiv)
 
+add_compile_definitions(PROJECT_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
-
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp "ResourceManager.h" "ResourceManager.cpp")
 
 # 包含目录（GLM 是 header-only，通过 target_link_libraries 自动处理）
 target_include_directories(${PROJECT_NAME} PRIVATE extern/opensubdiv)
@@ -47,3 +47,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     assimp::assimp   # vcpkg 的 assimp 提供此 target
     osd_static_cpu
 )
+
+# Fix MSVC reporting the wrong standard version
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /Zc:__cplusplus)
+endif()

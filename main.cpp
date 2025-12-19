@@ -15,13 +15,11 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
-
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/topologyRefinerFactory.h>
 #include <opensubdiv/far/primvarRefiner.h>
+
+#include "ResourceManager.h"
 
 typedef struct Vertex
 {
@@ -32,17 +30,8 @@ typedef struct Vertex
     void AddWithWeight(const Vertex& src, float weight) { pos += src.pos * weight; normal += src.normal * weight; uv += src.uv * weight; }
 } Vertex;
 
-struct BaseMesh
-{
-    std::vector<glm::vec3> vertices;
-    std::vector<glm::vec3> normals;
-    std::vector<glm::vec2> uvs;
-    std::vector<unsigned int> indices;
-    std::vector<int> vertsPerFace;
-};
+std::shared_ptr<MeshData> g_currentMesh;
 
-
-BaseMesh g_baseMesh;
 std::vector<Vertex> g_renderVerts;
 std::vector<unsigned int> g_renderIndices;
 
@@ -65,15 +54,11 @@ float g_cameraDist = 3.0f;
 
 void updateMeshSubdivsion(int level);
 void updateBuffers();
-bool loadOBJ(const std::string& path, BaseMesh& baseMesh);
-void createCube(BaseMesh& mesh);
-void loadModelData(int index);
+void createCube(std::shared_ptr<MeshData>& mesh);
+void loadModelData(int index, ResourceManager& resourceMgr);
 
 // Testing cube
-void createCube(BaseMesh& mesh) {
-    mesh.vertices.clear(); mesh.normals.clear(); mesh.uvs.clear(); 
-    mesh.indices.clear(); mesh.vertsPerFace.clear();
-
+void createCube(std::shared_ptr<MeshData>& mesh) {
     std::vector<glm::vec3> p = {
         {-0.5f,-0.5f, 0.5f}, { 0.5f,-0.5f, 0.5f}, { 0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f},
         {-0.5f,-0.5f,-0.5f}, { 0.5f,-0.5f,-0.5f}, { 0.5f, 0.5f,-0.5f}, {-0.5f, 0.5f,-0.5f}
@@ -83,123 +68,45 @@ void createCube(BaseMesh& mesh) {
         4,0,3, 3,7,4,  3,2,6, 6,7,3,  4,5,1, 1,0,4
     };
 
-    mesh.vertices = p;
-    mesh.indices = idx;
-    for(auto& v : p) { mesh.normals.push_back(glm::vec3(0,0,0)); mesh.uvs.push_back(glm::vec2(0,0)); }
-    for(int i=0; i<12; ++i) mesh.vertsPerFace.push_back(3);
+    mesh->vertices = p;
+    mesh->indices = idx;
+    for(auto& v : p) {
+        mesh->normals.push_back(glm::vec3(0,0,0));
+        mesh->uvs.push_back(glm::vec2(0,0));
+    }
+    for(int i=0; i<12; ++i)
+        mesh->vertsPerFace.push_back(3);
 
-    for (size_t i = 0; i < mesh.indices.size(); i += 3) {
-        unsigned int i0 = mesh.indices[i];
-        unsigned int i1 = mesh.indices[i+1];
-        unsigned int i2 = mesh.indices[i+2];
-        glm::vec3 v0 = mesh.vertices[i0];
-        glm::vec3 v1 = mesh.vertices[i1];
-        glm::vec3 v2 = mesh.vertices[i2];
+    for (size_t i = 0; i < mesh->indices.size(); i += 3) {
+        unsigned int i0 = mesh->indices[i];
+        unsigned int i1 = mesh->indices[i+1];
+        unsigned int i2 = mesh->indices[i+2];
+        glm::vec3 v0 = mesh->vertices[i0];
+        glm::vec3 v1 = mesh->vertices[i1];
+        glm::vec3 v2 = mesh->vertices[i2];
         glm::vec3 crossP = glm::cross(v1 - v0, v2 - v0);
         if (glm::length(crossP) > 1e-10f) {
-            mesh.normals[i0] += crossP; mesh.normals[i1] += crossP; mesh.normals[i2] += crossP;
+            mesh->normals[i0] += crossP; mesh->normals[i1] += crossP; mesh->normals[i2] += crossP;
         }
     }
-    for (auto& n : mesh.normals) if(glm::length(n)>0) n = glm::normalize(n);
-}
-
-bool loadOBJ(const std::string& path, BaseMesh& baseMesh) {
-    Assimp::Importer importer;
-    importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, 
-        aiComponent_NORMALS | aiComponent_TEXCOORDS | aiComponent_COLORS | aiComponent_TANGENTS_AND_BITANGENTS);
-
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
-
-    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-        std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
-        return false;
-    }
-
-    baseMesh.vertices.clear(); baseMesh.normals.clear();
-    baseMesh.uvs.clear(); baseMesh.indices.clear(); baseMesh.vertsPerFace.clear();
-
-    struct Vec3Cmp {
-        bool operator()(const glm::vec3& a, const glm::vec3& b) const {
-            if (glm::abs(a.x - b.x) > 1e-6f) return a.x < b.x;
-            if (glm::abs(a.y - b.y) > 1e-6f) return a.y < b.y;
-            return a.z < b.z - 1e-6f;
-        }
-    };
-    std::map<glm::vec3, unsigned int, Vec3Cmp> uniqueVerts;
-
-    for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
-        const aiMesh* mesh = scene->mMeshes[i];
-        for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
-            const aiFace& face = mesh->mFaces[j];
-            if (face.mNumIndices != 3) continue;
-
-            unsigned int triIdx[3];
-            for (int k = 0; k < 3; k++) {
-                glm::vec3 pos(mesh->mVertices[face.mIndices[k]].x, 
-                              mesh->mVertices[face.mIndices[k]].y, 
-                              mesh->mVertices[face.mIndices[k]].z);
-                
-                auto it = uniqueVerts.find(pos);
-                if (it == uniqueVerts.end()) {
-                    unsigned int newIdx = (unsigned int)baseMesh.vertices.size();
-                    baseMesh.vertices.push_back(pos);
-                    baseMesh.normals.push_back(glm::vec3(0,0,0)); 
-                    baseMesh.uvs.push_back(glm::vec2(0,0));
-                    uniqueVerts[pos] = newIdx;
-                    triIdx[k] = newIdx;
-                } else {
-                    triIdx[k] = it->second;
-                }
-            }
-
-            if (triIdx[0] == triIdx[1] || triIdx[1] == triIdx[2] || triIdx[2] == triIdx[0]) continue;
-
-            baseMesh.vertsPerFace.push_back(3);
-            baseMesh.indices.push_back(triIdx[0]);
-            baseMesh.indices.push_back(triIdx[1]);
-            baseMesh.indices.push_back(triIdx[2]);
-        }
-    }
-
-    // Calculate base mesh normal
-    for (size_t i = 0; i < baseMesh.indices.size(); i += 3) {
-        unsigned int i0 = baseMesh.indices[i];
-        unsigned int i1 = baseMesh.indices[i+1];
-        unsigned int i2 = baseMesh.indices[i+2];
-        glm::vec3 edge1 = baseMesh.vertices[i1] - baseMesh.vertices[i0];
-        glm::vec3 edge2 = baseMesh.vertices[i2] - baseMesh.vertices[i0];
-        glm::vec3 crossP = glm::cross(edge1, edge2);
-
-        if (glm::length(crossP) > 1e-10f) {
-            baseMesh.normals[i0] += crossP; baseMesh.normals[i1] += crossP; baseMesh.normals[i2] += crossP;
-        }
-    }
-    for (auto& n : baseMesh.normals) {
-        float len = glm::length(n);
-        if (len > 1e-10f) n /= len; else n = glm::vec3(0, 1, 0);
-    }
-
-    std::cout << "Model Loaded (" << path << "): " << baseMesh.vertices.size() << " verts." << std::endl;
-    return true;
+    for (auto& n : mesh->normals)
+        if(glm::length(n)>0)
+            n = glm::normalize(n);
 }
 
 // Load models
-void loadModelData(int index) {
-    g_baseMesh.vertices.clear(); g_baseMesh.normals.clear(); 
-    g_baseMesh.uvs.clear(); g_baseMesh.indices.clear(); g_baseMesh.vertsPerFace.clear();
-
+void loadModelData(int index, ResourceManager& resMgr) {
     if (index == 0) {
-        loadOBJ("../bunny.obj", g_baseMesh);
+		g_currentMesh = resMgr.GetMesh("bunny");
     } 
     else if (index == 1) {
-        loadOBJ("../suzanne.obj", g_baseMesh);
+		g_currentMesh = resMgr.GetMesh("suzanne");
     }
     else if (index == 2) {
-        loadOBJ("../original_bunny.obj", g_baseMesh);
+		g_currentMesh = resMgr.GetMesh("original_bunny");
     }
     else {
-        createCube(g_baseMesh);
-        std::cout << "Model Loaded: Cube" << std::endl;
+        createCube(g_currentMesh);
     }
 
     g_currentLevel = 0;
@@ -215,24 +122,24 @@ void updateMeshSubdivsion(int level)
 
     // Level 0:  BaseMesh
     if (level <= 0) {
-        for (size_t i = 0; i < g_baseMesh.vertices.size(); ++i) {
+        for (size_t i = 0; i < g_currentMesh->vertices.size(); ++i) {
             Vertex vert;
-            vert.pos = g_baseMesh.vertices[i];
-            vert.normal = g_baseMesh.normals[i]; 
-            vert.uv = g_baseMesh.uvs[i];
+            vert.pos = g_currentMesh->vertices[i];
+            vert.normal = g_currentMesh->normals[i]; 
+            vert.uv = g_currentMesh->uvs[i];
             g_renderVerts.push_back(vert);
         }
-        g_renderIndices = g_baseMesh.indices;
+        g_renderIndices = g_currentMesh->indices;
         updateBuffers(); 
         return;
     }
 
     // Setup Topology
     Far::TopologyDescriptor desc;
-    desc.numVertices = (int)g_baseMesh.vertices.size();
-    desc.numFaces = (int)g_baseMesh.vertsPerFace.size();
-    desc.numVertsPerFace = g_baseMesh.vertsPerFace.data();
-    desc.vertIndicesPerFace = (Far::Index*)g_baseMesh.indices.data();
+    desc.numVertices = (int)g_currentMesh->vertices.size();
+    desc.numFaces = (int)g_currentMesh->vertsPerFace.size();
+    desc.numVertsPerFace = g_currentMesh->vertsPerFace.data();
+    desc.vertIndicesPerFace = (Far::Index*)g_currentMesh->indices.data();
 
     Sdc::SchemeType type = Sdc::SchemeType::SCHEME_LOOP;
     Sdc::Options options;
@@ -247,9 +154,9 @@ void updateMeshSubdivsion(int level)
     std::vector<Vertex> refinedVerts(numTotalVertices);
 
     // Fill Level 0
-    int numLevel0 = g_baseMesh.vertices.size();
+    int numLevel0 = (int)g_currentMesh->vertices.size();
     for (int i = 0; i < numLevel0; ++i) {
-        refinedVerts[i].pos = g_baseMesh.vertices[i];
+        refinedVerts[i].pos = g_currentMesh->vertices[i];
         refinedVerts[i].normal = glm::vec3(0,0,0); 
         refinedVerts[i].uv = glm::vec2(0,0);
     }
@@ -348,7 +255,8 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         }
 
         if (modelChanged) {
-            loadModelData(g_modelIndex);
+			auto & resMgr = *(ResourceManager*)glfwGetWindowUserPointer(window);
+            loadModelData(g_modelIndex, resMgr);
         }
 
         // Change subvision level (1-6)
@@ -375,7 +283,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (action == GLFW_PRESS) {
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
-        g_lastX = xpos; g_lastY = ypos;
+        g_lastX = xpos;
+        g_lastY = ypos;
         if (button == GLFW_MOUSE_BUTTON_LEFT) g_leftMouseDown = true;
         if (button == GLFW_MOUSE_BUTTON_RIGHT) g_rightMouseDown = true;
     }
@@ -445,8 +354,19 @@ static void error_callback(int error, const char *description) { fprintf(stderr,
 
 int main(void)
 {
+    if (__cplusplus == 202002L)
+        std::cout << "C++20 is active!" << std::endl;
+    else
+        std::cout << "Standard version: " << __cplusplus << std::endl;
+
+    ResourceManager resMgr;
+	resMgr.RegisterResource("bunny", "bunny.obj");
+	resMgr.RegisterResource("suzanne", "suzanne.obj");
+	resMgr.RegisterResource("original_bunny", "original_bunny.obj");
+
     glfwSetErrorCallback(error_callback);
-    if (!glfwInit()) exit(EXIT_FAILURE);
+    if (!glfwInit())
+        exit(EXIT_FAILURE);
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -458,9 +378,13 @@ int main(void)
     glfwSetKeyCallback(window, key_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_position_callback);
+    glfwSetWindowUserPointer(window, &resMgr);
+
 
     glfwMakeContextCurrent(window);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+        return -1;
+
     glfwSwapInterval(1);
 
     auto compileShader = [](GLenum type, const char* src) {
@@ -495,7 +419,7 @@ int main(void)
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
 
     // Default model 0 (Bunny)
-    loadModelData(0);
+    loadModelData(0, resMgr);
 
     const GLint mvpLocation = glGetUniformLocation(program, "MVP");
     const GLint modelMatrixLocation = glGetUniformLocation(program, "ModelMatrix");
